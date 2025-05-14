@@ -11,63 +11,99 @@ import time
 API_URL = "https://ml-prediction-service-239475924060.us-central1.run.app"
 FEATURE_NAMES = [f'feature_{i}' for i in range(20)]
 
-# Feature descriptions for better UX
-FEATURE_DESCRIPTIONS = {
-    'feature_0': 'Feature 0 (Numeric)',
-    'feature_1': 'Feature 1 (Numeric)', 
-    # Add more descriptive names if you know what each feature represents
-}
-
-def call_api(endpoint: str, data: dict) -> dict:
-    """Call the ML API endpoint"""
+def test_api_connection() -> str:
+    """Test if API is reachable"""
     try:
-        response = requests.post(f"{API_URL}/{endpoint}", json=data, timeout=30)
+        response = requests.get(f"{API_URL}/", timeout=10)
+        return f"✅ API Status: {response.status_code} - {response.json()}"
+    except Exception as e:
+        return f"❌ API Connection Error: {str(e)}"
+
+def call_api_get(endpoint: str) -> dict:
+    """Call GET API endpoint"""
+    try:
+        response = requests.get(f"{API_URL}/{endpoint}", timeout=30)
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
         return {"error": f"API call failed: {str(e)}"}
 
-def get_model_info() -> dict:
-    """Get current model information"""
+def call_api_post(endpoint: str, data: dict) -> dict:
+    """Call POST API endpoint with proper headers"""
     try:
-        response = requests.get(f"{API_URL}/model/info", timeout=10)
+        headers = {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        }
+        response = requests.post(
+            f"{API_URL}/{endpoint}", 
+            json=data, 
+            headers=headers,
+            timeout=30
+        )
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
-        return {"error": f"Could not fetch model info: {str(e)}"}
+        error_detail = ""
+        if hasattr(e, 'response') and e.response is not None:
+            try:
+                error_detail = e.response.json()
+            except:
+                error_detail = e.response.text
+        return {"error": f"API call failed: {str(e)}", "detail": error_detail}
+
+def get_model_info() -> dict:
+    """Get current model information"""
+    return call_api_get("model/info")
 
 def predict_single(*features) -> Tuple[str, str]:
     """Make a single prediction"""
-    # Create request payload
-    feature_dict = {f'feature_{i}': features[i] for i in range(20)}
+    # Create request payload exactly as FastAPI expects
+    feature_dict = {f'feature_{i}': float(features[i]) for i in range(20)}
+    
+    print(f"Sending request: {feature_dict}")  # Debug
     
     # Call API
-    result = call_api("predict", feature_dict)
+    result = call_api_post("predict", feature_dict)
+    
+    print(f"Received response: {result}")  # Debug
     
     if "error" in result:
-        return f"❌ Error: {result['error']}", ""
+        error_msg = f"❌ Error: {result['error']}"
+        if "detail" in result:
+            error_msg += f"\nDetail: {result['detail']}"
+        return error_msg, ""
     
     # Format response
-    prediction = result['predictions'][0]
-    model_info = result['model_info']
-    
-    result_text = f"""
-    🎯 **Prediction Result**
-    
-    **Predicted Target:** {prediction:.4f}
-    
-    **Model Information:**
-    - Model Type: {model_info.get('model_type', 'Unknown')}
-    - Version: {model_info.get('version', 'Unknown')}
-    - Prediction Count: {model_info.get('prediction_count', 'Unknown')}
-    """
-    
-    # Create feature values summary
-    feature_summary = "**Input Features:**\n"
-    for i, value in enumerate(features):
-        feature_summary += f"- Feature {i}: {value}\n"
-    
-    return result_text, feature_summary
+    try:
+        predictions = result.get('predictions', [])
+        if isinstance(predictions, list) and len(predictions) > 0:
+            prediction = predictions[0]
+        else:
+            prediction = predictions
+            
+        model_info = result.get('model_info', {})
+        
+        result_text = f"""
+        🎯 **Prediction Result**
+        
+        **Predicted Target:** {prediction:.4f}
+        
+        **Model Information:**
+        - Model Type: {model_info.get('model_type', 'Unknown')}
+        - Version: {model_info.get('version', 'Unknown')}
+        - Prediction Count: {model_info.get('prediction_count', 'Unknown')}
+        """
+        
+        # Create feature values summary
+        feature_summary = "**Input Features:**\n"
+        for i, value in enumerate(features):
+            feature_summary += f"- Feature {i}: {value}\n"
+        
+        return result_text, feature_summary
+        
+    except Exception as e:
+        return f"❌ Error parsing response: {str(e)}\nRaw response: {result}", ""
 
 def predict_batch(file) -> Tuple[str, str]:
     """Make batch predictions from CSV file"""
@@ -83,18 +119,25 @@ def predict_batch(file) -> Tuple[str, str]:
         if missing_features:
             return f"❌ Missing features in CSV: {missing_features}", ""
         
-        # Prepare data
-        instances = df[FEATURE_NAMES].to_dict('records')
+        # Prepare data - convert to list of dictionaries
+        instances = []
+        for _, row in df.iterrows():
+            instance = {f'feature_{i}': float(row[f'feature_{i}']) for i in range(20)}
+            instances.append(instance)
         
-        # Call API
-        result = call_api("predict/batch", {"instances": instances})
+        # Call API with the correct structure
+        payload = {"instances": instances}
+        result = call_api_post("predict/batch", payload)
         
         if "error" in result:
-            return f"❌ Error: {result['error']}", ""
+            error_msg = f"❌ Error: {result['error']}"
+            if "detail" in result:
+                error_msg += f"\nDetail: {result['detail']}"
+            return error_msg, ""
         
         # Process results
-        predictions = result['predictions']
-        model_info = result['model_info']
+        predictions = result.get('predictions', [])
+        model_info = result.get('model_info', {})
         
         # Create results DataFrame
         results_df = df.copy()
@@ -174,34 +217,21 @@ def show_model_info() -> str:
     
     return info_text
 
-# Custom CSS for better styling
-custom_css = """
-#component-0 {
-    max-width: 1200px;
-    margin: 0 auto;
-}
-
-.prediction-result {
-    font-size: 18px;
-    font-weight: bold;
-    color: #2563eb;
-}
-
-.error-message {
-    color: #dc2626;
-    font-weight: bold;
-}
-"""
-
 # Create Gradio interface
-with gr.Blocks(css=custom_css, title="ML Model Prediction Interface") as interface:
+with gr.Blocks(title="ML Model Prediction Interface") as interface:
     
     gr.Markdown("""
     # 🤖 ML Model Prediction Interface
     
     This interface allows you to make predictions using our deployed LightGBM model.
-    Choose between single predictions or batch processing from CSV files.
     """)
+    
+    # API Connection Test
+    with gr.Row():
+        test_button = gr.Button("🔧 Test API Connection", variant="secondary")
+        api_status = gr.Textbox(label="API Status", interactive=False)
+    
+    test_button.click(fn=test_api_connection, outputs=[api_status])
     
     with gr.Tabs():
         # Single Prediction Tab
@@ -212,13 +242,13 @@ with gr.Blocks(css=custom_css, title="ML Model Prediction Interface") as interfa
             feature_inputs = []
             with gr.Row():
                 for i in range(10):
-                    with gr.Column():
+                    with gr.Column(scale=1):
                         inp = gr.Number(label=f"Feature {i}", value=0.0, precision=4)
                         feature_inputs.append(inp)
             
             with gr.Row():
                 for i in range(10, 20):
-                    with gr.Column():
+                    with gr.Column(scale=1):
                         inp = gr.Number(label=f"Feature {i}", value=0.0, precision=4)
                         feature_inputs.append(inp)
             
@@ -236,38 +266,6 @@ with gr.Blocks(css=custom_css, title="ML Model Prediction Interface") as interfa
                 outputs=[prediction_result, feature_summary]
             )
         
-        # Batch Prediction Tab
-        with gr.Tab("📊 Batch Prediction"):
-            gr.Markdown("""
-            ### Upload a CSV file with feature columns
-            
-            Your CSV should contain columns: `feature_0`, `feature_1`, ..., `feature_19`
-            """)
-            
-            file_upload = gr.File(
-                label="Upload CSV File",
-                file_types=[".csv"],
-                type="filepath"
-            )
-            
-            batch_predict_button = gr.Button("📈 Predict Batch", variant="primary")
-            
-            with gr.Row():
-                with gr.Column():
-                    batch_result = gr.Markdown(label="Batch Results")
-                with gr.Column():
-                    csv_download = gr.Textbox(
-                        label="Results CSV (copy to save)",
-                        lines=10,
-                        max_lines=20
-                    )
-            
-            batch_predict_button.click(
-                fn=predict_batch,
-                inputs=[file_upload],
-                outputs=[batch_result, csv_download]
-            )
-        
         # Model Information Tab
         with gr.Tab("ℹ️ Model Information"):
             gr.Markdown("### Current Model Status and Performance")
@@ -283,13 +281,11 @@ with gr.Blocks(css=custom_css, title="ML Model Prediction Interface") as interfa
             # Load model info on startup
             interface.load(fn=show_model_info, outputs=[model_info_display])
     
-    gr.Markdown("""
+    gr.Markdown(f"""
     ---
     
-    **API Endpoint:** `{}`
-    
-    **Features:** Single predictions, batch processing, model information
-    """.format(API_URL))
+    **API Endpoint:** `{API_URL}`
+    """)
 
 # Launch the interface
 if __name__ == "__main__":
