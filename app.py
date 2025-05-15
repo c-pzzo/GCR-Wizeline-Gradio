@@ -401,57 +401,29 @@ with gr.Blocks(css=custom_css, title="ML Model Prediction Interface - Complete")
                 outputs=[prediction_result, feature_summary]
             )
         
-        # Batch Prediction Tab (Multiple Methods)
+        # Batch Prediction Tab (CSV Upload Only)
         with gr.Tab("📊 Batch Prediction"):
             gr.Markdown("### Upload a CSV file for batch predictions")
             gr.Markdown("Your CSV should contain columns: `feature_0`, `feature_1`, ..., `feature_19`")
             
-            with gr.Tabs():
-                # Method 1: Using batch endpoint
-                with gr.Tab("Method 1: Batch API"):
-                    file_upload_batch = gr.File(
-                        label="Upload CSV File",
-                        file_types=[".csv"],
-                        type="filepath"
-                    )
-                    batch_predict_btn = gr.Button("📈 Predict Batch", variant="primary")
-                    
-                    with gr.Row():
-                        file_preview = gr.Markdown(label="File Preview")
-                    
-                    with gr.Row():
-                        with gr.Column():
-                            batch_result = gr.Markdown(label="Batch Results")
-                        with gr.Column():
-                            csv_download = gr.Code(label="Results CSV (copy to save)",lines=15)
-                    
-                    batch_predict_btn.click(
-                        fn=predict_batch,
-                        inputs=[file_upload_batch],
-                        outputs=[file_preview, batch_result, csv_download]
-                    )
-                
-                # Method 2: Using CSV endpoint
-                with gr.Tab("Method 2: Direct CSV Upload"):
-                    file_upload_csv = gr.File(
-                        label="Upload CSV File",
-                        file_types=[".csv"],
-                        type="filepath"
-                    )
-                    csv_predict_btn = gr.Button("📄 Process CSV", variant="primary")
-                    
-                    with gr.Row():
-                        with gr.Column():
-                            csv_result = gr.Markdown(label="CSV Results")
-                        with gr.Column():
-                            csv_download_direct = gr.Code(label="Results CSV",lines=15)
-                    
-                    csv_predict_btn.click(
-                        fn=predict_csv_direct,
-                        inputs=[file_upload_csv],
-                        outputs=[csv_result, csv_download_direct]
-                    )
-        
+            file_upload_csv = gr.File(
+                label="Upload CSV File",
+                file_types=[".csv"],
+                type="filepath"
+            )
+            csv_predict_btn = gr.Button("📄 Process CSV", variant="primary")
+            
+            with gr.Row():
+                with gr.Column():
+                    csv_result = gr.Markdown(label="CSV Results")
+                with gr.Column():
+                    csv_download_direct = gr.Code(label="Results CSV", lines=15)
+            
+            csv_predict_btn.click(
+                fn=predict_csv_direct,
+                inputs=[file_upload_csv],
+                outputs=[csv_result, csv_download_direct]
+            )
         # Model Information Tab
         with gr.Tab("ℹ️ Model Information"):
             gr.Markdown("### Detailed Model Status and Performance")
