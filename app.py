@@ -423,11 +423,7 @@ with gr.Blocks(css=custom_css, title="ML Model Prediction Interface - Complete")
                         with gr.Column():
                             batch_result = gr.Markdown(label="Batch Results")
                         with gr.Column():
-                            csv_download = gr.Code(
-                                label="Results CSV (copy to save)",
-                                language="text",
-                                lines=15
-                            )
+                            csv_download = gr.Code(label="Results CSV (copy to save)",lines=15)
                     
                     batch_predict_btn.click(
                         fn=predict_batch,
@@ -448,11 +444,7 @@ with gr.Blocks(css=custom_css, title="ML Model Prediction Interface - Complete")
                         with gr.Column():
                             csv_result = gr.Markdown(label="CSV Results")
                         with gr.Column():
-                            csv_download_direct = gr.Code(
-                                label="Results CSV",
-                                language="text",
-                                lines=15
-                            )
+                            csv_download_direct = gr.Code(label="Results CSV",lines=15)
                     
                     csv_predict_btn.click(
                         fn=predict_csv_direct,
